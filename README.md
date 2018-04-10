@@ -1,8 +1,8 @@
-
 wikiexport
 ==========
 
 Tool for exporting the entire contents of a mediawiki site in XML format.
+This tool needs python3.
 
 This tool finds all wiki namespaces ( such as User, Talk, etc ), and for each namespace then
 proceeds to download all pages. `wikiexport` can also download all binary files found on the wiki.
