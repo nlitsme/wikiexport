@@ -1,4 +1,4 @@
-wikiexport
+mediawiki
 ==========
 
 Tool for exporting the entire contents of a mediawiki site in XML format.
@@ -15,6 +15,20 @@ OPTIONS
  * `--savedir DIR`  save binary files to directory `DIR`.
  * `--limit NUM`  specify maximum simultaneous downloads.
  * `--batchsize NUM` specify the number of pages to download in one batch.
+
+EXAMPLE
+=======
+
+    python3 mediawiki.py  https://yourwiki.com/Mainpage
+
+
+BUGS
+====
+
+This does not work with all mediawiki sites, variation between sites can be quite large.
+Also some sites implement some kind of rate limiting, which causes the site to reject
+requests from this tool.
+
 
 AUTHOR
 ======

@@ -1,5 +1,8 @@
 """
 Author: Willem Hengeveld <itsme@xs4all.nl>
+
+Tool for exporting an entire mediawiki site.
+
 """
 import asyncio
 import aiohttp.connector
@@ -12,6 +15,9 @@ from collections import defaultdict
 debug = False
 
 class BaseurlFilter(html.parser.HTMLParser):
+    """
+    Extracts the mediawiki base url from an html page.
+    """
     def __init__(self):
         super().__init__()
         self.baseurl = defaultdict(int)
@@ -28,9 +34,10 @@ class BaseurlFilter(html.parser.HTMLParser):
         # set new captures
         if tag == 'li' and d.get('id') in ('pt-login', 'ca-viewsource', 't-print', 'ca-history', 't-permalink'):
             self.caphreflevel = len(self.stack)
-        elif self.caphreflevel and tag == 'a':
-            url = d.get('href')
-            self.baseurl[url[:url.find('?')]] += 1
+        elif tag == 'a':
+            if self.caphreflevel or d.get('id') in ('pt-login', 'ca-viewsource', 't-print', 'ca-history', 't-permalink'):
+                url = d.get('href')
+                self.baseurl[url[:url.find('?')]] += 1
 
     def handle_endtag(self, tag):
         # clean up captures
@@ -47,7 +54,7 @@ class BaseurlFilter(html.parser.HTMLParser):
                     while len(self.stack)>i:
                         self.stack.pop()
                     return
-            print("could not find start tag for:", tag, "in", self.stack)
+            print("could not find start tag for: '%s' in %s" % (tag, self.stack))
 
 
     def handle_startendtag(self, tag, attrs):
@@ -58,7 +65,9 @@ class BaseurlFilter(html.parser.HTMLParser):
 
 
 def ExtractBaseurl(html):
-    # finds wiki baseurl on html page
+    """
+    Finds wiki baseurl on html page
+    """
     try:
         parser = BaseurlFilter()
         parser.feed(html)
@@ -74,6 +83,9 @@ def ExtractBaseurl(html):
 
 
 async def findbaseurl(loop, page):
+    """
+    Downloads the specified page, and extracts the wiki's baseurl from it.
+    """
     try:
         client = aiohttp.ClientSession(loop=loop)
         req = await client.get(page)
@@ -84,6 +96,9 @@ async def findbaseurl(loop, page):
 
 
 class NamespacesFilter(html.parser.HTMLParser):
+    """
+    Parser object for extracting the list of namespaces from an html page.
+    """
     def __init__(self):
         super().__init__()
         self.baseurl = defaultdict(int)
@@ -138,6 +153,9 @@ class NamespacesFilter(html.parser.HTMLParser):
 
 
 def ExtractNamespaces(html):
+    """
+    Extract the list of namespaces from an html page.
+    """
     try:
         parser = NamespacesFilter()
         parser.feed(html)
@@ -147,6 +165,9 @@ def ExtractNamespaces(html):
     return parser.namespaces
 
 class AllpagesFilter(html.parser.HTMLParser):
+    """
+    Parser object for extracting the list of wiki pagenames from an AllPages html output.
+    """
     def __init__(self):
         super().__init__()
         self.allpageslist = []
@@ -233,6 +254,9 @@ class AllpagesFilter(html.parser.HTMLParser):
 
 
 def ExtractAllPages(html):
+    """
+    Extract the list of wiki pagenames from an AllPages html output.
+    """
     if debug:
         print("extract all pages, htmlsize=%d" % len(html))
     try:
@@ -244,6 +268,9 @@ def ExtractAllPages(html):
     return parser
 
 class MediaWiki:
+    """
+    object for talking to a mediawiki server.
+    """
     def __init__(self, loop, baseurl, args):
         self.baseurl = baseurl
 
@@ -258,12 +285,22 @@ class MediaWiki:
         self.cookies = []
     def __del__(self):
         self.client.close()
+
     def get(self, params, path=""):
+        """
+        Do a HTTP GET request
+        """
         return self.client.get(self.baseurl+path, params=params)
     def post(self, form):
+        """
+        Do a HTTP POST request
+        """
         return self.client.post(self.baseurl, data=aiohttp.FormData(form))
 
     async def savefile(self, name, fh):
+        """
+        Save the binary file to <fh>
+        """
         try:
             resp = await self.get({'title':'Special:Redirect/file/'+name})
             while True:
@@ -276,6 +313,9 @@ class MediaWiki:
             fh.close()
 
     async def namespaces(self):
+        """
+        Get list of namespaces from the wiki.
+        """
         try:
             resp = await self.get({'title':'Special:PrefixIndex'})
             ns = ExtractNamespaces(await resp.text())
@@ -284,6 +324,10 @@ class MediaWiki:
         return ns
 
     async def allpages(self, ns, frm = None, unt = None):
+        """
+        Generator which generates all page names on the wiki.
+        This function can call itself recursively.
+        """
         while True:
             if debug:
                 print("allpages, ns:'%s', frm:'%s'" % (ns, frm))
@@ -326,6 +370,9 @@ class MediaWiki:
 
 
     async def export(self, pages, curonly=True):
+        """
+        Request the XML export for the list of pages.
+        """
         print("export %d pages, curonly=%s" % (len(pages), curonly))
         d = {'title':'Special:Export', 'action':'submit', 'pages':"\n".join(pages)}
         if curonly:
@@ -338,6 +385,9 @@ class MediaWiki:
         return xml
 
     async def exportpage(self, pagename):
+        """
+        Export a single page as XML.
+        """
         print("export single page: %s" % (pagename))
         try:
             resp = await self.get({}, "/Special:Export/%s" % urllib.parse.quote(pagename, safe=''))
@@ -364,7 +414,12 @@ class MediaWiki:
 #       basepath = 
 
 async def exportsite(loop, somepage, args):
+    """
+    Top level function handling the xml wiki export.
+    """
     baseurl = await findbaseurl(loop, somepage)
+
+    print("Using baseurl = %s" % (baseurl))
 
     wiki = MediaWiki(loop, baseurl, args)
 
