@@ -1,7 +1,8 @@
 """
 Author: Willem Hengeveld <itsme@xs4all.nl>
 
-Tool for exporting an entire mediawiki site.
+Tool for printing an entire mediawiki site to stdout.
+Mediafiles are saved to the directory specified with --savedir
 
 """
 import asyncio
@@ -291,6 +292,7 @@ class MediaWiki:
         Do a HTTP GET request
         """
         return self.client.get(self.baseurl+path, params=params)
+
     def post(self, form):
         """
         Do a HTTP POST request
@@ -447,7 +449,9 @@ async def exportsite(loop, somepage, args):
     for d in downloads:
         d = await d
         if d:
+            # output the xml data to stdout
             print(d.decode('utf-8', 'ignore'))
+
             # todo: if download failed -> retry
 
 def main():
