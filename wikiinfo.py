@@ -253,13 +253,17 @@ def parseInfobox(ibox):
               or isinstance(item, WikiParser.HtmlElem):
             records[-1].append(item)
         else:
-            print("??? - %s" % item)
+            # .. todo: ignore comment
+            #print("??? - %s" % item)
+            pass
 
     d = dict()
     for rec in records:
         m = re.match(r'^\s*(\w+)\s*=\s*(.*)', rec[0])
         if not m:
-            print("!!! - %s" % rec)
+            # todo: ignore infobox header
+            #print("!!! - %s" % rec)
+            pass
         else:
             k = m.group(1)
             v0 = m.group(2)
@@ -272,9 +276,44 @@ def parseInfobox(ibox):
     #    print("\t%-30s\t%s" % (k, v))
     return d
 
-def extractValue(value):
-    # todo
-    return value
+def extractValue(valuelist):
+    if not valuelist:
+        return
+    for item in valuelist:
+        if isinstance(item, WikiParser.WikiItem) and item.token == "{{":
+            v = extractValue(item.contents)
+            if v:
+                return v
+        elif isinstance(item, WikiParser.WikiData):
+            base = None
+            exponent = 0
+            accuracy = None
+            isvalue = None
+            for fld in item.data.split('|'):
+                if not fld:
+                    continue
+                if fld == 'val':
+                    isvalue = True
+                elif fld.startswith('fmt='):
+                    pass
+                elif isvalue:
+                    m = re.match(r'^(\w+)\s*=\s*(\S*)', fld)
+                    if m:
+                        if m.group(1) == 'e':
+                            exponent = int(m.group(2))
+                        elif m.group(1) in ('u', 'ul'):
+                            unit = m.group(2)
+                        else:
+                            print("unknown value property: %s" % fld)
+                    elif base is None:
+                        base = float(fld)
+                    elif accuracy is None:
+                        accuracy = float(fld)
+                    else:
+                        print("value:", fld)
+            if isvalue:
+                return base * pow(10, exponent)
+    return 
 
 def getpage(language, pagename):
     import urllib.request
