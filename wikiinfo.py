@@ -8,14 +8,20 @@ python3 wikiinfo --pages "Venus,Mars,Mercury,Earth" --properties "
 """
 import re
 
-def parsehtml(token):
-    m = re.match(r'<(\w+)(.*?)/?>', token)
+def parsehtmltoken(token):
+    """
+    parses a html token :  <tag attrs...>
+    returns:  tag, undecoded-attr-string
+    """
+    m = re.match(r'<\s*(\w+)(.*?)/?>', token)
     if m:
         return m.group(1), m.group(2)
     print("ERROR invalid html: %s" % token)
 
 class WikiParser:
     """
+    Decode a mediawiki text containing of the following elements:
+
     {{command | ... }}
     {{{...}}}
     [[pagename | ... ]]
@@ -166,6 +172,7 @@ class WikiParser:
                     token = token[len(opentoken):]
 
             elif token.startswith("</"):
+                # html close tag
                 htmlelem = self.close(token)
                 if htmlelem:
                     htmlopen = htmlelem[0]
@@ -174,12 +181,15 @@ class WikiParser:
                 else:
                     print("ERROR - no close for '%s' at %d: %s" % (token, o, text[o-32:o+32].encode('utf-8')))
             elif token.startswith("<!--"):
+                # comment tag
                 self.stack.append(self.Comment(token))
             elif token.startswith("<") and token.endswith("/>"):
-                tag, attr = parsehtml(token)
+                # single <tag ..../>  element
+                tag, attr = parsehtmltoken(token)
                 self.stack.append(self.HtmlElem(tag, attr))
             elif token.startswith("<") and token.endswith(">"):
-                tag, attr = parsehtml(token)
+                # opening <tag ....>
+                tag, attr = parsehtmltoken(token)
 
                 # special handling for <math>, <nowiki>, <noinclude>
                 if tag in ('math', 'nowiki', 'noinclude'):
@@ -212,7 +222,7 @@ class WikiParser:
 
 def parseWikitext(wikitext):
     w = WikiParser()
-    w.feed(wikitext.decode('utf-8'))
+    w.feed(wikitext)
 
     return w.stack
 
@@ -220,9 +230,17 @@ def findTemplate(tree, templatename):
     for item in tree:
         if isinstance(item, WikiParser.WikiItem):
             if isinstance(item.contents[0], WikiParser.WikiData):
-                n = item.contents[0].data.split(" ")
-                if n[0] == templatename:
+                if item.contents[0].data.startswith(templatename):
                     return item.contents
+
+def findAllTemplates(tree, templatename):
+    for item in tree:
+        if isinstance(item, WikiParser.WikiItem):
+            if isinstance(item.contents[0], WikiParser.WikiData):
+                if item.contents[0].data.startswith(templatename):
+                    yield item.contents
+
+
 
 def parseInfobox(ibox):
     """
@@ -259,7 +277,7 @@ def parseInfobox(ibox):
 
     d = dict()
     for rec in records:
-        m = re.match(r'^\s*(\w+)\s*=\s*(.*)', rec[0])
+        m = re.match(r'^\s*([^=]+)\s*=\s*(.*)', rec[0])
         if not m:
             # todo: ignore infobox header
             #print("!!! - %s" % rec)
@@ -281,9 +299,13 @@ def extractValue(valuelist):
         return
     for item in valuelist:
         if isinstance(item, WikiParser.WikiItem) and item.token == "{{":
+            # recurse
             v = extractValue(item.contents)
             if v:
                 return v
+
+            # otherwise just return the string content
+            return item.contents
         elif isinstance(item, WikiParser.WikiData):
             base = None
             exponent = 0
@@ -313,6 +335,10 @@ def extractValue(valuelist):
                         print("value:", fld)
             if isvalue:
                 return base * pow(10, exponent)
+        else:
+            # just return the value
+            return item
+
     return 
 
 def getpage(language, pagename):
@@ -335,7 +361,7 @@ def main():
         print("==>", pg, "<==")
         try:
             wikitext = getpage(args.language, pg)
-            tree = parseWikitext(wikitext)
+            tree = parseWikitext(wikitext.decode('utf-8'))
             ibox = findTemplate(tree, "Infobox")
 
             props = parseInfobox(ibox)
