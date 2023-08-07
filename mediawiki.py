@@ -87,12 +87,9 @@ async def findbaseurl(loop, page):
     """
     Downloads the specified page, and extracts the wiki's baseurl from it.
     """
-    try:
-        client = aiohttp.ClientSession(loop=loop)
+    async with aiohttp.ClientSession(loop=loop) as client:
         req = await client.get(page)
         uri = urllib.parse.urljoin(page, ExtractBaseurl(await req.text()))
-    finally:
-        client.close()
     return uri
 
 
@@ -284,8 +281,10 @@ class MediaWiki:
 
         self.client = aiohttp.ClientSession(loop=loop, headers=hdrs, **moreargs)
         self.cookies = []
+
     def __del__(self):
-        self.client.close()
+        if self.client:
+           asyncio.get_event_loop().create_task(self.client.close())
 
     def get(self, params, path=""):
         """
@@ -445,7 +444,7 @@ async def exportsite(loop, somepage, args):
         # add remaining to export
         downloads.append(wiki.export(pglist, curonly=not args.history))
         pglist = []
-    asyncio.wait(downloads)
+    #done, pending = await asyncio.wait(downloads)
     for d in downloads:
         d = await d
         if d:
